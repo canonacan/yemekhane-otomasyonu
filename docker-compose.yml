@@ -29,9 +29,10 @@ x-uygulama-ortam: &uygulama-ortam
   DB_PORT: "3306"
   DB_ADI: yemekhane
   DB_KULLANICI: yemekhane_app
-  DB_SIFRE: Uyg_2026
+  DB_SIFRE: ${DB_SIFRE}
   REDIS_HOST: redis
   REDIS_PORT: "6379"
+  
 
 services:
 
@@ -80,12 +81,12 @@ services:
     entrypoint: ["bash", "/replica-setup.sh"]
     restart: "no"
     environment:
-      MYSQL_ROOT_PASSWORD: yemekhane_kok
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: yemekhane
       MYSQL_USER: yemekhane_app
-      MYSQL_PASSWORD: Uyg_2026
+      MYSQL_PASSWORD: ${DB_SIFRE}
       REPL_USER: repl
-      REPL_PASSWORD: Repl_2026
+      REPL_PASSWORD: ${REPL_PASSWORD}
     volumes:
       - ./db/replica-setup.sh:/replica-setup.sh:ro
     depends_on:
@@ -138,18 +139,18 @@ services:
   # 2. Uygulama container içinde 8000 portunu dinlesin (ya da UYGULAMA_ADRES'i değiştirin).
   # 3. Aşağıdaki satırların başındaki "# " işaretlerini kaldırın.
   # ---------------------------------------------------------------
-  # uygulama:
-  #   build: ./uygulama
-  #   restart: unless-stopped
-  #   environment:
-  #     <<: *uygulama-ortam
-  #   depends_on:
-  #     mysql-primary:
-  #       condition: service_healthy
-  #     redis:
-  #       condition: service_healthy
-  #     replica-setup:
-  #       condition: service_completed_successfully
+  uygulama:
+    build: ./uygulama
+    restart: unless-stopped
+    environment:
+      <<: *uygulama-ortam
+    depends_on:
+      mysql-primary:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      replica-setup:
+        condition: service_completed_successfully
 
 volumes:
   mysql-primary-veri:

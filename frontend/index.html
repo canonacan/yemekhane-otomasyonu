@@ -1,70 +1,484 @@
+
 <!DOCTYPE html>
 <html lang="tr">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Yemekhane Otomasyonu · Başlangıç</title>
-  <link rel="stylesheet" href="/css/temel.css">
-  <style>
-    /* Yalnızca bu geçici sayfaya ait stiller */
-    .fis {
-      background: var(--yuzey);
-      margin-block: 2rem;
-      padding: 1.5rem var(--bosluk);
-      border-radius: var(--kose);
-      /* yemek fişi görünümü: alt kenarda yırtma çizgisi */
-      border-bottom: 2px dashed var(--cizgi);
-    }
-    .fis h1 { margin-bottom: 0.25rem; }
-    .fis .alt { color: var(--metin-soluk); margin-bottom: 1.5rem; }
-    .servisler { width: 100%; border-collapse: collapse; font-size: var(--boyut-kucuk); }
-    .servisler th, .servisler td { text-align: left; padding: 0.5rem 0.25rem; border-bottom: 1px solid var(--cizgi); }
-    .servisler td:last-child { white-space: nowrap; }
-    #uygulama-durumu { margin-top: 1.5rem; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yemekhane Otomasyonu</title>
+    <link rel="stylesheet" href="/css/temel.css">
+    <script src="/js/menuler.js" defer></script>
 </head>
 <body>
-  <main class="kapsayici">
-    <section class="fis">
-      <h1>Yemekhane Otomasyonu</h1>
-      <p class="alt">Apache çalışıyor. Bu sayfa başlangıç paketine ait; kendi giriş ekranınızla değiştirin.</p>
 
-      <div class="tablo-kaydir">
-        <table class="servisler">
-          <thead>
-            <tr><th>Servis</th><th>Görevi</th><th>Bilgisayarınızdan</th></tr>
-          </thead>
-          <tbody>
-            <tr><td>frontend</td><td>HTML/CSS, yönlendirme</td><td>localhost:8080</td></tr>
-            <tr><td>mysql-primary</td><td>yazma</td><td>localhost:3307</td></tr>
-            <tr><td>mysql-replica</td><td>okuma, salt okunur</td><td>localhost:3308</td></tr>
-            <tr><td>redis</td><td>menü önbelleği, oturum</td><td>localhost:6379</td></tr>
-            <tr><td>uygulama</td><td>sizin yazacağınız servis</td><td>Apache üzerinden</td></tr>
-          </tbody>
-        </table>
-      </div>
+<header class="ust-alan">
+    <div class="kapsayici ust-icerik">
+        <div class="ust-sol">
+            <a class="logo" href="#" data-sekme="menuler">Yemekhane</a>
 
-      <p id="uygulama-durumu" class="bildirim" role="status">Uygulama servisi kontrol ediliyor…</p>
+            <nav class="sekme-menusu" aria-label="Ana menü">
+                <button type="button" class="sekme-dugme aktif"
+                        data-sekme="menuler" aria-selected="true">
+                    Günün Menüsü
+                </button>
+
+                <button type="button" class="sekme-dugme"
+                        data-sekme="haftalik-menuler" aria-selected="false">
+                    Haftalık Menü
+                </button>
+
+                <button type="button" class="sekme-dugme"
+                        id="rezervasyon-sekme-btn"
+                        data-sekme="rezervasyonlarim"
+                        aria-selected="false" hidden>
+                    Rezervasyonlarım
+                </button>
+
+                <button type="button" class="sekme-dugme"
+                        id="bakiye-sekme-btn"
+                        data-sekme="bakiye"
+                        aria-selected="false" hidden>
+                    Bakiyem
+                </button>
+
+                <!-- YÖNETİCİ PANELİ SEKME BUTONU -->
+                <button type="button" class="sekme-dugme"
+                        id="yonetici-sekme-btn"
+                        data-sekme="yonetici-paneli"
+                        aria-selected="false" hidden>
+                    Yönetici Paneli
+                </button>
+            </nav>
+        </div>
+
+        <div class="ust-sag">
+            <div class="kullanici-alani" id="kullanici-alani" hidden>
+                <span id="aktif-kullanici"></span>
+            </div>
+
+            <button type="button" class="sekme-dugme" id="giris-cikis-btn">
+                Giriş Yap
+            </button>
+        </div>
+    </div>
+</header>
+
+<main class="kapsayici ana-icerik">
+
+    <!-- GÜNÜN MENÜSÜ -->
+    <section id="menuler" class="sekme-icerik">
+        <div class="sayfa-baslik">
+            <p class="ust-yazi">YEMEKHANE OTOMASYONU</p>
+            <h1>Günün Menüsü</h1>
+            <p>Yemekhanelerde sunulan yemekleri ve içeriklerini inceleyin.</p>
+        </div>
+
+        <div class="filtre-alani">
+            <div class="filtre">
+                <label for="yemekhane-sec">Yemekhane</label>
+                <select id="yemekhane-sec">
+                    <option value="">Tüm Yemekhaneler</option>
+                </select>
+            </div>
+
+            <div class="filtre">
+                <label for="ogun-sec">Öğün</label>
+                <select id="ogun-sec">
+                    <option value="">Tüm Öğünler</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="bolum-baslik">
+            <h2>Menüler</h2>
+            <button type="button" class="dugme" id="yenile-btn">
+                Menüyü Yenile
+            </button>
+        </div>
+
+        <p id="yukleniyor" class="bildirim" role="status">
+            Menüler yükleniyor...
+        </p>
+
+        <div id="menu-listesi" class="menu-listesi"></div>
+
+        <p id="hata-mesaji" class="bildirim bildirim-hata"
+           role="alert" hidden></p>
     </section>
-  </main>
 
-  <script>
-    // Web API modunda /api/ isteği uygulamaya gider. 502/503 ise uygulama yok ya da çalışmıyor.
-    const kutu = document.getElementById('uygulama-durumu');
-    fetch('/api/', { headers: { Accept: 'application/json' } })
-      .then(yanit => {
-        if (yanit.status === 502 || yanit.status === 503) {
-          kutu.textContent = 'Uygulama servisine ulaşılamıyor. docker-compose.yml içindeki uygulama servisini ekleyip "docker compose up -d" çalıştırın.';
-          kutu.classList.add('bildirim-hata');
-        } else {
-          kutu.textContent = 'Uygulama servisi yanıt veriyor (HTTP ' + yanit.status + ').';
-          kutu.classList.add('bildirim-basari');
-        }
-      })
-      .catch(() => {
-        kutu.textContent = 'İstek gönderilemedi. Apache günlüğüne bakın: docker compose logs frontend';
-        kutu.classList.add('bildirim-hata');
-      });
-  </script>
+
+    <!-- HAFTALIK MENÜ -->
+    <section id="haftalik-menuler" class="sekme-icerik" hidden>
+        <div class="sayfa-baslik">
+            <p class="ust-yazi">HAFTALIK PLANLAMA</p>
+            <h1>Haftalık Menü ve Rezervasyon</h1>
+            <p>Haftalık yemekleri, fiyatları ve yemekhane doluluk durumlarını inceleyin.</p>
+        </div>
+
+        <div class="bolum-baslik">
+            <h2>Haftalık Menüler</h2>
+            <button type="button" class="dugme" id="haftalik-yenile-btn">
+                Haftalık Menüyü Yenile
+            </button>
+        </div>
+
+        <p id="haftalik-yukleniyor" class="bildirim"
+           role="status" hidden>
+            Haftalık menüler yükleniyor...
+        </p>
+
+        <div id="haftalik-menu-listesi" class="menu-listesi"></div>
+
+        <p id="haftalik-hata-mesaji" class="bildirim bildirim-hata"
+           role="alert" hidden></p>
+    </section>
+
+
+    <!-- REZERVASYONLARIM -->
+    <section id="rezervasyonlarim" class="sekme-icerik" hidden>
+        <div class="sayfa-baslik">
+            <p class="ust-yazi">KULLANICI İŞLEMLERİ</p>
+            <h1>Rezervasyonlarım</h1>
+            <p>Aktif, kullanılmış ve iptal edilmiş rezervasyonlarınızı görüntüleyin.</p>
+        </div>
+
+        <div class="bolum-baslik">
+            <h2>Rezervasyon Geçmişim</h2>
+            <button type="button" class="dugme"
+                    id="rezervasyon-yenile-btn">
+                Rezervasyonları Yenile
+            </button>
+        </div>
+
+        <p id="rezervasyon-yukleniyor" class="bildirim"
+           role="status" hidden>
+            Rezervasyonlar yükleniyor...
+        </p>
+
+        <div id="rezervasyon-listesi" class="menu-listesi"></div>
+
+        <p id="rezervasyon-hata-mesaji"
+           class="bildirim bildirim-hata"
+           role="alert" hidden></p>
+    </section>
+
+
+    <!-- BAKİYEM -->
+    <section id="bakiye" class="sekme-icerik" hidden>
+        <div class="sayfa-baslik">
+            <p class="ust-yazi">HESAP İŞLEMLERİ</p>
+            <h1>Bakiyem</h1>
+            <p>Güncel bakiyenizi ve hesap hareketlerinizi görüntüleyin.</p>
+        </div>
+
+        <article class="menu-karti bakiye-karti">
+            <h2>Güncel Bakiyem</h2>
+            <p id="guncel-bakiye" class="bakiye-tutari">0,00 TL</p>
+            <button type="button" class="dugme"
+                    id="bakiye-yenile-btn">
+                Bakiyeyi Yenile
+            </button>
+        </article>
+
+        <div class="form-karti bakiye-form-karti">
+            <h2>Bakiye Yükle</h2>
+
+            <form id="bakiye-yukleme-formu">
+                <div class="filtre">
+                    <label for="yukleme-tutari">Yüklenecek Tutar (TL)</label>
+                    <input type="number"
+                           id="yukleme-tutari"
+                           name="tutar"
+                           min="10"
+                           max="1000"
+                           step="0.01"
+                           placeholder="Örn. 100"
+                           required>
+                </div>
+
+                <button type="submit" class="dugme">
+                    Bakiye Yükle
+                </button>
+
+                <p id="bakiye-yukleme-mesaji"
+                   class="bildirim" role="status" hidden></p>
+            </form>
+        </div>
+
+        <div class="bolum-baslik">
+            <h2>Bakiye Hareketlerim</h2>
+        </div>
+
+        <p id="bakiye-yukleniyor" class="bildirim"
+           role="status" hidden>
+            Bakiye hareketleri yükleniyor...
+        </p>
+
+        <div id="bakiye-hareket-listesi" class="menu-listesi"></div>
+
+        <p id="bakiye-hata-mesaji"
+           class="bildirim bildirim-hata"
+           role="alert" hidden></p>
+    </section>
+
+
+    <!-- YÖNETİCİ PANELİ -->
+    <section id="yonetici-paneli" class="sekme-icerik" hidden>
+
+        <div class="sayfa-baslik">
+            <p class="ust-yazi">YÖNETİM İŞLEMLERİ</p>
+            <h1>Yönetici Paneli</h1>
+            <p>Menüleri oluşturun, düzenleyin ve doluluk ile değerlendirme raporlarını inceleyin.</p>
+        </div>
+
+        <!-- MENÜ OLUŞTURMA -->
+        <div class="form-karti">
+            <h2 id="yonetici-form-baslik">Yeni Menü Oluştur</h2>
+
+            <form id="yonetici-menu-formu">
+
+                <input type="hidden" id="yonetici-menu-id">
+
+                <div class="filtre">
+                    <label for="yonetici-yemekhane">Yemekhane</label>
+                    <select id="yonetici-yemekhane" required>
+                        <option value="">Yemekhane seçin</option>
+                    </select>
+                </div>
+
+                <div class="filtre">
+                    <label for="yonetici-tarih">Menü Tarihi</label>
+                    <input type="date"
+                           id="yonetici-tarih"
+                           required>
+                </div>
+
+                <div class="filtre">
+                    <label for="yonetici-ogun">Öğün</label>
+                    <select id="yonetici-ogun" required>
+                        <option value="">Öğün seçin</option>
+                    </select>
+                </div>
+
+                <div class="filtre">
+                    <label for="yonetici-ogrenci-fiyati">Öğrenci Fiyatı (TL)</label>
+                    <input type="number"
+                           id="yonetici-ogrenci-fiyati"
+                           min="0"
+                           step="0.01"
+                           placeholder="Öğrenci fiyatı"
+                           required>
+                </div>
+
+                <div class="filtre">
+                    <label for="yonetici-personel-fiyati">Personel Fiyatı (TL)</label>
+                    <input type="number"
+                           id="yonetici-personel-fiyati"
+                           min="0"
+                           step="0.01"
+                           placeholder="Personel fiyatı"
+                           required>
+                </div>
+
+                <div class="filtre">
+                    <label for="yonetici-yemekler">Menüdeki Yemekler</label>
+                    <select id="yonetici-yemekler"
+                            multiple
+                            size="8"
+                            required>
+                    </select>
+                    <small>Birden fazla yemek seçmek için Ctrl tuşunu kullanabilirsiniz.</small>
+                </div>
+
+                <button type="submit" class="dugme"
+                        id="yonetici-menu-kaydet-btn">
+                    Menüyü Oluştur
+                </button>
+
+                <button type="button" class="dugme"
+                        id="yonetici-form-temizle-btn">
+                    Formu Temizle
+                </button>
+
+                <p id="yonetici-form-mesaji"
+                   class="bildirim"
+                   role="status"
+                   hidden></p>
+            </form>
+        </div>
+
+
+        <!-- MENÜ LİSTESİ VE RAPORLAR -->
+        <div class="bolum-baslik">
+            <h2>Menü Yönetimi ve Raporlar</h2>
+
+            <button type="button"
+                    class="dugme"
+                    id="yonetici-menuleri-yenile-btn">
+                Menüyü Yenile
+            </button>
+        </div>
+
+        <p id="yonetici-yukleniyor"
+           class="bildirim"
+           role="status"
+           hidden>
+            Yönetici menüleri yükleniyor...
+        </p>
+
+        <p id="yonetici-hata-mesaji"
+           class="bildirim bildirim-hata"
+           role="alert"
+           hidden></p>
+
+        <div id="yonetici-menu-listesi"
+             class="menu-listesi">
+        </div>
+
+    </section>
+
+
+    <!-- YÖNETİCİ PANELİ -->
+    <section id="yonetici-paneli" class="sekme-icerik" hidden>
+        <div class="sayfa-baslik">
+            <p class="ust-yazi">YÖNETİM İŞLEMLERİ</p>
+            <h1>Yönetici Paneli</h1>
+            <p>Menü oluşturun, mevcut menüleri düzenleyin ve doluluk ile değerlendirme bilgilerini inceleyin.</p>
+        </div>
+
+        <div class="form-karti">
+            <h2 id="yonetici-form-baslik">Yeni Menü Oluştur</h2>
+
+            <form id="yonetici-menu-formu">
+                <input type="hidden" id="yonetici-menu-id">
+
+                <div class="filtre">
+                    <label for="yonetici-yemekhane">Yemekhane</label>
+                    <select id="yonetici-yemekhane" required>
+                        <option value="">Yemekhane seçin</option>
+                    </select>
+                </div>
+
+                <div class="filtre">
+                    <label for="yonetici-tarih">Menü tarihi</label>
+                    <input type="date" id="yonetici-tarih" required>
+                </div>
+
+                <div class="filtre">
+                    <label for="yonetici-ogun">Öğün</label>
+                    <select id="yonetici-ogun" required>
+                        <option value="">Öğün seçin</option>
+                    </select>
+                </div>
+
+                <div class="filtre">
+                    <label for="yonetici-ogrenci-fiyati">Öğrenci fiyatı (TL)</label>
+                    <input type="number"
+                           id="yonetici-ogrenci-fiyati"
+                           min="0"
+                           step="0.01"
+                           required>
+                </div>
+
+                <div class="filtre">
+                    <label for="yonetici-personel-fiyati">Personel fiyatı (TL)</label>
+                    <input type="number"
+                           id="yonetici-personel-fiyati"
+                           min="0"
+                           step="0.01"
+                           required>
+                </div>
+
+                <div class="filtre">
+                    <label for="yonetici-yemekler">Menü yemekleri</label>
+                    <select id="yonetici-yemekler"
+                            multiple
+                            size="8"
+                            required>
+                    </select>
+                    <small>Birden fazla yemek seçmek için Ctrl tuşunu kullanabilirsiniz.</small>
+                </div>
+
+                <button type="submit"
+                        class="dugme"
+                        id="yonetici-menu-kaydet-btn">
+                    Menüyü Oluştur
+                </button>
+
+                <button type="button"
+                        class="dugme"
+                        id="yonetici-form-temizle-btn">
+                    Formu Temizle
+                </button>
+
+                <p id="yonetici-form-mesaji"
+                   class="bildirim"
+                   role="status"
+                   hidden></p>
+            </form>
+        </div>
+
+        <div class="bolum-baslik">
+            <h2>Menü Yönetimi ve Raporlama</h2>
+
+            <button type="button"
+                    class="dugme"
+                    id="yonetici-menuleri-yenile-btn">
+                Menülerini Yenile
+            </button>
+        </div>
+
+        <p id="yonetici-yukleniyor"
+           class="bildirim"
+           role="status"
+           hidden>
+            Yönetici menüleri yükleniyor...
+        </p>
+
+        <div id="yonetici-menu-listesi" class="menu-listesi"></div>
+
+        <p id="yonetici-hata-mesaji"
+           class="bildirim bildirim-hata"
+           role="alert"
+           hidden></p>
+    </section>
+
+    <!-- GİRİŞ EKRANI -->
+    <section id="giris" class="sekme-icerik" hidden>
+        <div class="sayfa-baslik">
+            <p class="ust-yazi">KULLANICI İŞLEMLERİ</p>
+            <h1>Giriş Yap</h1>
+            <p>Yemekhane otomasyonu hesabınıza giriş yapın.</p>
+        </div>
+
+        <div class="form-karti">
+            <form id="giris-formu">
+                <div class="filtre">
+                    <label for="giris-email">E-posta</label>
+                    <input type="email" id="giris-email"
+                           name="email"
+                           placeholder="E-posta adresiniz" required>
+                </div>
+
+                <div class="filtre">
+                    <label for="giris-sifre">Şifre</label>
+                    <input type="password" id="giris-sifre"
+                           name="sifre"
+                           placeholder="Şifreniz" required>
+                </div>
+
+                <button type="submit" class="dugme">Giriş Yap</button>
+
+                <p id="giris-mesaji" class="bildirim"
+                   role="status" hidden></p>
+            </form>
+        </div>
+    </section>
+
+</main>
+
+<footer class="alt-alan">
+    <div class="kapsayici">Yemekhane Otomasyonu</div>
+</footer>
+
 </body>
 </html>
