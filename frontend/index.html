@@ -40,6 +40,11 @@
                     Bakiyem
                 </button>
 
+                <button type="button" class="sekme-dugme" id="profil-sekme-btn"
+                        data-sekme="profil" aria-selected="false" hidden>
+                    Alerjen Profilim
+                </button>
+
                 <!-- YÖNETİCİ PANELİ SEKME BUTONU -->
                 <button type="button" class="sekme-dugme"
                         id="yonetici-sekme-btn"
@@ -440,6 +445,20 @@
            class="bildirim bildirim-hata"
            role="alert"
            hidden></p>
+    </section>
+
+    <!-- ALERJEN PROFİLİ -->
+    <section id="profil" class="sekme-icerik" hidden>
+        <div class="sayfa-baslik">
+            <p class="ust-yazi">KİŞİSEL TERCİHLER</p>
+            <h1>Alerjen Profilim</h1>
+            <p>Kaçınmak istediğiniz alerjenleri seçin. Menüde bu alerjenleri içeren yemekler uyarıyla gösterilir.</p>
+        </div>
+        <div class="form-karti">
+            <div id="alerjen-secim-listesi" class="alerjen-secim-listesi"></div>
+            <button type="button" class="dugme" id="alerjenleri-kaydet-btn">Tercihlerimi Kaydet</button>
+            <p id="alerjen-profil-mesaji" class="bildirim" role="status" hidden></p>
+        </div>
     </section>
 
     <!-- GİRİŞ EKRANI -->

@@ -478,3 +478,9 @@ body {
     opacity: 0.6;
     cursor: not-allowed;
 }
+
+/* Aşama 4: alerjen profil alanı ve uyarılar */
+.alerjen-secim-listesi { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 16px 0; }
+.alerjen-secim-satiri { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid #d8dee8; border-radius: 8px; cursor: pointer; }
+.alerjen-secim-satiri input { width: auto; }
+.alerjen-uyarisi { color: #a12622; background: #fff0ef; border-left: 4px solid #c62828; padding: 8px 10px; border-radius: 4px; font-weight: 600; }

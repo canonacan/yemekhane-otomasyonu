@@ -698,3 +698,36 @@ def update_menu(
     finally:
         cursor.close()
         connection.close()
+
+
+# ========================================
+# AŞAMA 4: ALERJEN TERCİHLERİ
+# ========================================
+
+def get_all_allergens():
+    return execute_read("SELECT id, ad FROM alerjenler ORDER BY ad")
+
+def get_user_allergen_ids(user_id):
+    rows = execute_read(
+        "SELECT alerjen_id FROM kullanici_alerjenleri WHERE kullanici_id = %s ORDER BY alerjen_id",
+        (user_id,)
+    )
+    return [int(row["alerjen_id"]) for row in rows]
+
+def set_user_allergens(user_id, allergen_ids):
+    connection = get_write_connection()
+    cursor = connection.cursor()
+    try:
+        cursor.execute("DELETE FROM kullanici_alerjenleri WHERE kullanici_id = %s", (user_id,))
+        for allergen_id in sorted(set(allergen_ids)):
+            cursor.execute(
+                "INSERT INTO kullanici_alerjenleri (kullanici_id, alerjen_id) VALUES (%s, %s)",
+                (user_id, allergen_id)
+            )
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        cursor.close()
+        connection.close()

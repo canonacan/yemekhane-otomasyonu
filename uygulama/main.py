@@ -15,6 +15,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+
 from database.repository import (
     RepositoryValidationError,
     call_procedure,
@@ -29,7 +30,10 @@ from database.repository import (
     get_admin_options,
     get_admin_menus,
     create_menu,
-    update_menu
+    update_menu,
+    get_all_allergens,
+    get_user_allergen_ids,
+    set_user_allergens
 )
 
 
@@ -44,6 +48,11 @@ class GirisIstegi(BaseModel):
 
 class RezervasyonIstegi(BaseModel):
     menu_id: int = Field(gt=0)
+    yarim_porsiyon: bool = False
+
+
+class AlerjenTercihiIstegi(BaseModel):
+    alerjen_idleri: list[int] = Field(default_factory=list)
 
 
 class DegerlendirmeIstegi(BaseModel):
@@ -104,7 +113,6 @@ app = FastAPI(
     description="Yemekhane otomasyonu Web API uygulaması",
     version="1.0.0"
 )
-
 
 # --------------------------------------------------
 # REDIS BAĞLANTISI
@@ -197,23 +205,20 @@ def ana_sayfa():
 
 
 # --------------------------------------------------
-# MENÜLER VE REDIS ÖNBELLEKLEME
+# MENÜLER
 # --------------------------------------------------
 
 def menu_onbellek_suresi():
     simdi = datetime.now()
     yarin = date.today() + timedelta(days=1)
     gun_sonu = datetime.combine(yarin, datetime.min.time())
-
     return max(1, int((gun_sonu - simdi).total_seconds()))
 
 
 def menu_onbellegini_temizle():
     anahtarlar = list(redis_client.scan_iter(match="menu:*"))
-
     if anahtarlar:
         redis_client.delete(*anahtarlar)
-
     print("ONBELLEK SIL - Menü önbelleği temizlendi.")
 
 
@@ -233,7 +238,6 @@ def menu_listesi():
                 for veri in onbellek_verileri
                 for satir in json.loads(veri)
             ]
-
             sonuc.sort(
                 key=lambda satir: (
                     str(satir["tarih"]),
@@ -242,7 +246,6 @@ def menu_listesi():
                     satir["kategori_sira"]
                 )
             )
-
             print("ONBELLEK HIT - Menüler Redis'ten getirildi.")
             return sonuc
 
@@ -255,7 +258,6 @@ def menu_listesi():
         tarih = str(menu["tarih"])
         yemekhane_id = menu["yemekhane_id"]
         ogun_id = menu["ogun_id"]
-
         key = f"menu:{yemekhane_id}:{tarih}:{ogun_id}"
         gruplar.setdefault(key, []).append(menu)
 
@@ -263,13 +265,11 @@ def menu_listesi():
 
     if gruplar:
         redis_client.delete(liste_key)
-
         for key, satirlar in gruplar.items():
             veri = json.dumps(
                 jsonable_encoder(satirlar),
                 ensure_ascii=False
             )
-
             redis_client.setex(key, ttl, veri)
 
         redis_client.sadd(liste_key, *gruplar.keys())
@@ -313,13 +313,11 @@ def giris_yap(istek: GirisIstegi, request: Request):
 
     # Önceki oturumu varsa sil
     eski_token = request.cookies.get("yemekhane_oturum")
-
     if eski_token:
         redis_client.delete(f"oturum:{eski_token}")
 
     # Yeni oturum oluştur
     token = secrets.token_urlsafe(32)
-
     redis_client.setex(
         f"oturum:{token}",
         1800,
@@ -386,7 +384,8 @@ def rezervasyon_yap(
             "sp_rezervasyon_yap",
             (
                 kullanici["id"],
-                istek.menu_id
+                istek.menu_id,
+                int(istek.yarim_porsiyon)
             )
         )
 
@@ -402,7 +401,8 @@ def rezervasyon_yap(
             "mesaj": "Rezervasyon başarıyla oluşturuldu.",
             "rezervasyon_id": rezervasyon["rezervasyon_id"],
             "ucret": str(rezervasyon["ucret"]),
-            "bakiye": str(rezervasyon["bakiye"])
+            "bakiye": str(rezervasyon["bakiye"]),
+            "yarim_porsiyon": bool(rezervasyon.get("yarim_porsiyon", istek.yarim_porsiyon))
         }
 
     except mysql.connector.Error as hata:
@@ -608,6 +608,29 @@ def degerlendirme_ekle(
 # --------------------------------------------------
 # YÖNETİCİ - SEÇENEKLER
 # --------------------------------------------------
+
+@app.get("/api/alerjen-tercihleri")
+def alerjen_tercihlerini_getir(request: Request):
+    kullanici = aktif_oturum_kullanicisi(request)
+    return {
+        "alerjenler": get_all_allergens(),
+        "secili_alerjen_idleri": get_user_allergen_ids(kullanici["id"])
+    }
+
+
+@app.put("/api/alerjen-tercihleri")
+def alerjen_tercihlerini_kaydet(istek: AlerjenTercihiIstegi, request: Request):
+    kullanici = aktif_oturum_kullanicisi(request)
+    mevcut = {int(a["id"]) for a in get_all_allergens()}
+    secilen = set(istek.alerjen_idleri)
+    if not secilen.issubset(mevcut):
+        raise HTTPException(status_code=400, detail="Geçersiz alerjen seçimi.")
+    try:
+        set_user_allergens(kullanici["id"], secilen)
+    except mysql.connector.Error:
+        raise HTTPException(status_code=500, detail="Alerjen tercihleri kaydedilemedi.")
+    return {"mesaj": "Alerjen tercihleriniz kaydedildi.", "secili_alerjen_idleri": sorted(secilen)}
+
 
 @app.get("/api/yonetici/secenekler")
 def yonetici_secenekleri(request: Request):

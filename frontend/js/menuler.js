@@ -43,6 +43,11 @@ const bakiyeYuklemeMesaji = document.getElementById("bakiye-yukleme-mesaji");
 const bakiyeYukleniyor = document.getElementById("bakiye-yukleniyor");
 const bakiyeHareketListesi = document.getElementById("bakiye-hareket-listesi");
 const bakiyeHataMesaji = document.getElementById("bakiye-hata-mesaji");
+const profilSekmeButonu = document.getElementById("profil-sekme-btn");
+const alerjenSecimListesi = document.getElementById("alerjen-secim-listesi");
+const alerjenleriKaydetBtn = document.getElementById("alerjenleri-kaydet-btn");
+const alerjenProfilMesaji = document.getElementById("alerjen-profil-mesaji");
+let kullaniciAlerjenIdleri = [];
 
 // ========================================
 // YÖNETİCİ PANELİ HTML ELEMANLARI
@@ -78,7 +83,7 @@ let aktifKullaniciBilgisi = null;
 
 
 // ========================================
-// SEKME GEÇİŞLERİ
+// SEKME GEÇİ�?LERİ
 // ========================================
 
 function sekmeAc(sekmeId) {
@@ -174,6 +179,7 @@ function menuGrupla(veriler) {
                 tarih: yemek.tarih,
                 yemekhane: yemek.yemekhane,
                 ogun: yemek.ogun,
+                ogunId: Number(yemek.ogun_id),
                 ogrenciFiyati: yemek.ogrenci_fiyati,
                 personelFiyati: yemek.personel_fiyati,
                 kapasite: yemek.kapasite,
@@ -211,8 +217,16 @@ function yemekleriEkle(kart, yemekler) {
             `Vejetaryen: ${Number(yemek.vejetaryen) === 1 ? "Evet" : "Hayır"} | ` +
             `Alerjenler: ${yemek.alerjenler || "Belirtilmemiş"}`
         );
-
-        satir.append(ad, bilgi, ozellik);
+        const yemekAlerjenleri = String(yemek.alerjen_idler || "")
+            .split(",").map(Number).filter(Number.isFinite);
+        const cakisanlar = yemekAlerjenleri.filter(id => kullaniciAlerjenIdleri.includes(id));
+        if (cakisanlar.length) {
+            const uyari = elemanOlustur("p", `⚠ Seçtiğiniz alerjen(ler)i içeriyor: ${yemek.alerjenler || "Alerjen"}`, "alerjen-uyarisi");
+            uyari.setAttribute("role", "alert");
+            satir.append(ad, bilgi, ozellik, uyari);
+        } else {
+            satir.append(ad, bilgi, ozellik);
+        }
         yemekListesi.appendChild(satir);
 
         toplamKalori += Number(yemek.kalori) || 0;
@@ -447,7 +461,7 @@ function kullaniciFiyatiniGetir(menu) {
 
 
 // ========================================
-// REZERVASYON İŞLEMİ
+// REZERVASYON İ�?LEMİ
 // ========================================
 
 async function rezervasyonYap(menu, buton, durumMesaji) {
@@ -473,6 +487,13 @@ async function rezervasyonYap(menu, buton, durumMesaji) {
         return;
     }
 
+    let yarimPorsiyon = false;
+    if (Number(menu.ogunId) !== 1) {
+        yarimPorsiyon = window.confirm(
+            "Yarım porsiyon seçmek ister misiniz?\n\nTamam: Yarım porsiyon (%60 ücret)\nİptal: Tam porsiyon"
+        );
+    }
+
     buton.disabled = true;
     buton.textContent = "İşlem yapılıyor...";
     durumMesaji.textContent = "";
@@ -485,7 +506,8 @@ async function rezervasyonYap(menu, buton, durumMesaji) {
             },
             credentials: "same-origin",
             body: JSON.stringify({
-                menu_id: menu.menuId
+                menu_id: menu.menuId,
+                yarim_porsiyon: yarimPorsiyon
             })
         });
 
@@ -496,7 +518,7 @@ async function rezervasyonYap(menu, buton, durumMesaji) {
         }
 
         durumMesaji.textContent =
-            `${veri.mesaj} Ücret: ${veri.ucret} TL. Kalan bakiye: ${veri.bakiye} TL.`;
+            `${veri.mesaj} ${veri.yarim_porsiyon ? "Yarım porsiyon. " : "Tam porsiyon. "}Ücret: ${veri.ucret} TL. Kalan bakiye: ${veri.bakiye} TL.`;
 
         if (aktifKullaniciBilgisi) {
             aktifKullaniciBilgisi.bakiye = veri.bakiye;
@@ -508,6 +530,7 @@ async function rezervasyonYap(menu, buton, durumMesaji) {
 
         await rezervasyonlarimiGetir();
         await bakiyeBilgileriniGetir();
+        await alerjenProfiliniGetir();
 
     } catch (error) {
         durumMesaji.textContent = error.message;
@@ -1212,6 +1235,7 @@ function kullaniciArayuzunuGuncelle(kullanici) {
         yoneticiSekmeButonu.hidden = kullanici.rol !== "yonetici";
         rezervasyonSekmeButonu.hidden = false;
         bakiyeSekmeButonu.hidden = false;
+        profilSekmeButonu.hidden = false;
 
         const bakiye = Number(kullanici.bakiye || 0)
             .toLocaleString("tr-TR", {
@@ -1231,6 +1255,8 @@ function kullaniciArayuzunuGuncelle(kullanici) {
         yoneticiSekmeButonu.hidden = true;
         rezervasyonSekmeButonu.hidden = true;
         bakiyeSekmeButonu.hidden = true;
+        profilSekmeButonu.hidden = true;
+        kullaniciAlerjenIdleri = [];
 
         rezervasyonListesi.replaceChildren();
         bakiyeHareketListesi.replaceChildren();
@@ -1274,6 +1300,7 @@ async function oturumuKontrolEt() {
 
             await rezervasyonlarimiGetir();
             await bakiyeBilgileriniGetir();
+            await alerjenProfiliniGetir();
 
         } else {
             kullaniciArayuzunuGuncelle(null);
@@ -1287,7 +1314,7 @@ async function oturumuKontrolEt() {
 
 
 // ========================================
-// GİRİŞ YAP
+// GİRİ�? YAP
 // ========================================
 
 async function girisYap(event) {
@@ -1348,7 +1375,7 @@ async function girisYap(event) {
 
 
 // ========================================
-// ÇIKIŞ YAP
+// ÇIKI�? YAP
 // ========================================
 
 async function cikisYap() {
@@ -1383,7 +1410,7 @@ async function cikisYap() {
 
 
 // ========================================
-// GİRİŞ / ÇIKIŞ TEK BUTON
+// GİRİ�? / ÇIKI�? TEK BUTON
 // ========================================
 
 girisCikisButonu.addEventListener("click", async () => {
@@ -1757,6 +1784,62 @@ async function yoneticiPaneliniAc() {
 }
 
 // ========================================
+// ALERJEN PROFİLİ
+// ========================================
+
+async function alerjenProfiliniGetir() {
+    if (!aktifKullaniciBilgisi) return;
+    alerjenProfilMesaji.hidden = true;
+    alerjenSecimListesi.replaceChildren();
+    try {
+        const response = await fetch("/api/alerjen-tercihleri", { credentials: "same-origin" });
+        const veri = await response.json();
+        if (!response.ok) throw new Error(veri.detail || "Alerjenler alınamadı.");
+        kullaniciAlerjenIdleri = (veri.secili_alerjen_idleri || []).map(Number);
+        menuleriFiltrele();
+        if (haftalikMenulerYuklendi) {
+            haftalikMenuleriGoster(menuGrupla(haftalikMenuVerileri));
+        }
+        (veri.alerjenler || []).forEach((alerjen) => {
+            const satir = document.createElement("label");
+            satir.className = "alerjen-secim-satiri";
+            const kutu = document.createElement("input");
+            kutu.type = "checkbox";
+            kutu.value = alerjen.id;
+            kutu.checked = kullaniciAlerjenIdleri.includes(Number(alerjen.id));
+            satir.append(kutu, document.createTextNode(alerjen.ad));
+            alerjenSecimListesi.appendChild(satir);
+        });
+    } catch (error) {
+        alerjenProfilMesaji.textContent = error.message;
+        alerjenProfilMesaji.hidden = false;
+    }
+}
+
+async function alerjenTercihleriniKaydet() {
+    const alerjen_idleri = Array.from(alerjenSecimListesi.querySelectorAll('input[type="checkbox"]:checked'))
+        .map(kutu => Number(kutu.value));
+    alerjenleriKaydetBtn.disabled = true;
+    try {
+        const response = await fetch("/api/alerjen-tercihleri", {
+            method: "PUT", credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ alerjen_idleri })
+        });
+        const veri = await response.json();
+        if (!response.ok) throw new Error(veri.detail || "Tercihler kaydedilemedi.");
+        kullaniciAlerjenIdleri = (veri.secili_alerjen_idleri || []).map(Number);
+        alerjenProfilMesaji.textContent = veri.mesaj;
+        alerjenProfilMesaji.hidden = false;
+        menuleriFiltrele();
+        if (haftalikMenulerYuklendi) haftalikMenuleriGoster(menuGrupla(haftalikMenuVerileri));
+    } catch (error) {
+        alerjenProfilMesaji.textContent = error.message;
+        alerjenProfilMesaji.hidden = false;
+    } finally { alerjenleriKaydetBtn.disabled = false; }
+}
+
+// ========================================
 // OLAY DİNLEYİCİLERİ
 // ========================================
 
@@ -1773,6 +1856,8 @@ haftalikYenileButonu.addEventListener("click", () => {
 rezervasyonYenileButonu.addEventListener("click", rezervasyonlarimiGetir);
 
 bakiyeYenileButonu.addEventListener("click", bakiyeBilgileriniGetir);
+profilSekmeButonu.addEventListener("click", alerjenProfiliniGetir);
+alerjenleriKaydetBtn.addEventListener("click", alerjenTercihleriniKaydet);
 bakiyeYuklemeFormu.addEventListener("submit", bakiyeYukle);
 yoneticiMenuFormu.addEventListener(
     "submit",
@@ -1793,7 +1878,7 @@ girisFormu.addEventListener("submit", girisYap);
 
 
 // ========================================
-// İLK AÇILIŞ
+// İLK AÇILI�?
 // ========================================
 
 sekmeAc("menuler");
