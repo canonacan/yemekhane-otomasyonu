@@ -1,12 +1,19 @@
+
 import os
+import json
+import secrets
+import redis
+
+from datetime import datetime, date, timedelta
 import bcrypt
 import mysql.connector
 
 from decimal import Decimal
 
+from fastapi.encoders import jsonable_encoder
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
-from starlette.middleware.sessions import SessionMiddleware
 
 from database.repository import (
     RepositoryValidationError,
@@ -98,13 +105,15 @@ app = FastAPI(
     version="1.0.0"
 )
 
-app.add_middleware(
-    SessionMiddleware,
-    secret_key=os.environ["SESSION_SECRET_KEY"],
-    session_cookie="yemekhane_oturum",
-    max_age=60 * 60 * 8,
-    same_site="lax",
-    https_only=False
+
+# --------------------------------------------------
+# REDIS BAĞLANTISI
+# --------------------------------------------------
+
+redis_client = redis.Redis(
+    host=os.getenv("REDIS_HOST", "redis"),
+    port=int(os.getenv("REDIS_PORT", "6379")),
+    decode_responses=True
 )
 
 
@@ -124,18 +133,30 @@ def kullanici_bilgisi(kullanici):
 
 
 def aktif_oturum_kullanicisi(request: Request):
-    kullanici_id = request.session.get("kullanici_id")
+    token = request.cookies.get("yemekhane_oturum")
 
-    if not kullanici_id:
+    if not token:
         raise HTTPException(
             status_code=401,
             detail="Bu işlem için giriş yapmalısınız."
         )
 
-    kullanici = get_user_by_id(kullanici_id)
+    oturum_key = f"oturum:{token}"
+    kullanici_id = redis_client.get(oturum_key)
+
+    if not kullanici_id:
+        raise HTTPException(
+            status_code=401,
+            detail="Oturum geçersiz. Tekrar giriş yapmalısınız."
+        )
+
+    # Her istekte oturum süresini 30 dakika yenile
+    redis_client.expire(oturum_key, 1800)
+
+    kullanici = get_user_by_id(int(kullanici_id))
 
     if not kullanici or not kullanici["aktif"]:
-        request.session.clear()
+        redis_client.delete(oturum_key)
         raise HTTPException(
             status_code=401,
             detail="Oturum geçersiz. Tekrar giriş yapmalısınız."
@@ -176,12 +197,85 @@ def ana_sayfa():
 
 
 # --------------------------------------------------
-# MENÜLER
+# MENÜLER VE REDIS ÖNBELLEKLEME
 # --------------------------------------------------
+
+def menu_onbellek_suresi():
+    simdi = datetime.now()
+    yarin = date.today() + timedelta(days=1)
+    gun_sonu = datetime.combine(yarin, datetime.min.time())
+
+    return max(1, int((gun_sonu - simdi).total_seconds()))
+
+
+def menu_onbellegini_temizle():
+    anahtarlar = list(redis_client.scan_iter(match="menu:*"))
+
+    if anahtarlar:
+        redis_client.delete(*anahtarlar)
+
+    print("ONBELLEK SIL - Menü önbelleği temizlendi.")
+
 
 @app.get("/api/menuler")
 def menu_listesi():
-    return get_daily_menus()
+    bugun = date.today().isoformat()
+    liste_key = f"menu:liste:{bugun}"
+
+    menu_keyleri = redis_client.smembers(liste_key)
+
+    if menu_keyleri:
+        onbellek_verileri = redis_client.mget(list(menu_keyleri))
+
+        if all(veri is not None for veri in onbellek_verileri):
+            sonuc = [
+                satir
+                for veri in onbellek_verileri
+                for satir in json.loads(veri)
+            ]
+
+            sonuc.sort(
+                key=lambda satir: (
+                    str(satir["tarih"]),
+                    satir["yemekhane_id"],
+                    satir["ogun_sira"],
+                    satir["kategori_sira"]
+                )
+            )
+
+            print("ONBELLEK HIT - Menüler Redis'ten getirildi.")
+            return sonuc
+
+    print("ONBELLEK MISS - Menüler veritabanından getirildi.")
+
+    menuler = get_daily_menus()
+    gruplar = {}
+
+    for menu in menuler:
+        tarih = str(menu["tarih"])
+        yemekhane_id = menu["yemekhane_id"]
+        ogun_id = menu["ogun_id"]
+
+        key = f"menu:{yemekhane_id}:{tarih}:{ogun_id}"
+        gruplar.setdefault(key, []).append(menu)
+
+    ttl = menu_onbellek_suresi()
+
+    if gruplar:
+        redis_client.delete(liste_key)
+
+        for key, satirlar in gruplar.items():
+            veri = json.dumps(
+                jsonable_encoder(satirlar),
+                ensure_ascii=False
+            )
+
+            redis_client.setex(key, ttl, veri)
+
+        redis_client.sadd(liste_key, *gruplar.keys())
+        redis_client.expire(liste_key, ttl)
+
+    return menuler
 
 
 @app.get("/api/haftalik-menuler")
@@ -217,13 +311,36 @@ def giris_yap(istek: GirisIstegi, request: Request):
             detail="E-posta veya şifre hatalı."
         )
 
-    request.session.clear()
-    request.session["kullanici_id"] = kullanici["id"]
+    # Önceki oturumu varsa sil
+    eski_token = request.cookies.get("yemekhane_oturum")
 
-    return {
+    if eski_token:
+        redis_client.delete(f"oturum:{eski_token}")
+
+    # Yeni oturum oluştur
+    token = secrets.token_urlsafe(32)
+
+    redis_client.setex(
+        f"oturum:{token}",
+        1800,
+        str(kullanici["id"])
+    )
+
+    yanit = JSONResponse(content={
         "mesaj": "Giriş başarılı.",
         "kullanici": kullanici_bilgisi(kullanici)
-    }
+    })
+
+    yanit.set_cookie(
+        key="yemekhane_oturum",
+        value=token,
+        max_age=1800,
+        httponly=True,
+        samesite="lax",
+        secure=False
+    )
+
+    return yanit
 
 
 @app.get("/api/oturum")
@@ -238,12 +355,19 @@ def oturum_kontrol(request: Request):
 
 @app.post("/api/cikis")
 def cikis_yap(request: Request):
-    request.session.clear()
+    token = request.cookies.get("yemekhane_oturum")
 
-    return {
+    if token:
+        redis_client.delete(f"oturum:{token}")
+
+    yanit = JSONResponse(content={
         "mesaj": "Başarıyla çıkış yapıldı.",
         "giris_yapildi": False
-    }
+    })
+
+    yanit.delete_cookie("yemekhane_oturum")
+
+    return yanit
 
 
 # --------------------------------------------------
@@ -525,6 +649,8 @@ def yonetici_menu_olustur(
             istek.yemek_idleri
         )
 
+        menu_onbellegini_temizle()
+
         return {
             "mesaj": "Menü başarıyla oluşturuldu.",
             "menu_id": menu_id
@@ -574,6 +700,8 @@ def yonetici_menu_duzenle(
             istek.personel_fiyati,
             istek.yemek_idleri
         )
+
+        menu_onbellegini_temizle()
 
         return {
             "mesaj": "Menü başarıyla güncellendi.",

@@ -1,6 +1,6 @@
-
-fastapi
+﻿fastapi
 uvicorn
 mysql-connector-python
 bcrypt
 itsdangerous
+redis
